@@ -171,11 +171,10 @@ def main():
     p_sync.set_defaults(func=cmd_sync)
 
     p_config = subparsers.add_parser("config", help="Manage configuration")
-    config_group = p_config.add_mutually_exclusive_group()
-    config_group.add_argument("--show", action="store_true", help="Display current config")
-    config_group.add_argument("--set", action="store_true", help="Set a config value")
-    p_config.add_argument("--key", help="Config key (dot notation, e.g. vault.path)")
-    p_config.add_argument("--value", help="Config value")
+    p_config.add_argument("--show", action="store_true", help="Display current config")
+    p_config.add_argument("--set", action="store_true", help="Set a config value")
+    p_config.add_argument("key", nargs="?", default=None, help="Config key (dot notation, e.g. vault.path)")
+    p_config.add_argument("value", nargs="?", default=None, help="Config value")
     p_config.set_defaults(func=cmd_config)
 
     args = parser.parse_args()
