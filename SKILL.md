@@ -2,6 +2,19 @@
 
 Manage an Obsidian vault -- create, edit, search, and organize notes using `notesmd-cli`, with automated git sync, knowledge base structure, and health checks.
 
+## First-Time Setup
+
+When the user asks to initialize a vault, set up Obsidian manager, or run setup for the first time, read `docs/01-init.md` and follow the interactive flow. It will guide you through:
+1. Checking prerequisites (git, notesmd-cli)
+2. Asking the user for vault path, name, and git remote
+3. Configuring `obsidian-manager.json`
+4. Running `python scripts/obsidian_mgr.py init`
+5. Verifying the result
+
+Do NOT load `docs/01-init.md` for routine operations (create, search, sync, lint). Reserve it for first-time setup and re-initialization requests.
+
+## Scheduled Tasks
+
 ## Scheduled Tasks
 
 - `obsidian_sync`: every 30 minutes execute `python scripts/obsidian_mgr.py sync`

@@ -78,10 +78,8 @@ def run_init(config: dict) -> None:
     raw_dir = config.get("knowledge", {}).get("raw_dir", ".raw")
 
     if not vault_path.exists():
-        print(f"Vault path does not exist: {vault_path}", file=sys.stderr)
-        print("Create the vault directory first or run:", file=sys.stderr)
-        print(f"  python scripts/obsidian_mgr.py config --set vault.path <path>", file=sys.stderr)
-        sys.exit(1)
+        print(f"Creating vault directory: {vault_path}")
+        vault_path.mkdir(parents=True, exist_ok=True)
 
     print(f"Initializing vault at {vault_path}...")
 
