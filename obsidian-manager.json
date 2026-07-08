@@ -1,0 +1,21 @@
+{
+  "vault": {
+    "path": "",
+    "name": ""
+  },
+  "git": {
+    "remote": "",
+    "branch": "main",
+    "auto_sync_minutes": 30
+  },
+  "conventions": {
+    "attachment_dir": "attachments",
+    "daily_dir": "daily",
+    "template_dir": "templates",
+    "frontmatter": {
+      "required_fields": ["title", "tags", "created", "modified"],
+      "date_format": "YYYY-MM-DD HH:mm:ss"
+    },
+    "wikilinks": true
+  }
+}
