@@ -221,14 +221,19 @@ This vault is managed by openclaw-obsidian-manager.
         init_repo(vault_path, remote, branch)
         print("  Initialized git repository")
 
-    result = subprocess.run(
-        ["notesmd-cli", "add-vault", str(vault_path), "--set-default"],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        print(f"  Warning: Could not register vault with notesmd-cli: {result.stderr.strip()}")
-    else:
-        print("  Registered vault with notesmd-cli")
+    try:
+        result = subprocess.run(
+            ["notesmd-cli", "add-vault", str(vault_path), "--set-default"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            print(f"  Warning: Could not register vault with notesmd-cli: {result.stderr.strip()}")
+        else:
+            print("  Registered vault with notesmd-cli")
+    except FileNotFoundError:
+        print("  Warning: notesmd-cli not found. Install it to enable CLI operations.")
+        print("    Windows: scoop install notesmd-cli")
+        print("    macOS/Linux: brew install yakitrak/yakitrak/notesmd-cli")
 
     print(f"\nVault initialized: {vault_path}")
     print("Next steps:")

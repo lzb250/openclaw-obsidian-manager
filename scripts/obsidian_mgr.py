@@ -101,6 +101,9 @@ def cmd_config(args):
         import json
         print(json.dumps(config, indent=2, ensure_ascii=False))
     elif args.set:
+        if args.key is None or args.value is None:
+            print("Usage: config --set <key> <value>", file=sys.stderr)
+            return
         key_parts = args.key.split(".")
         value = args.value
         try:

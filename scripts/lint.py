@@ -69,6 +69,8 @@ def run_lint(config: dict, fix: bool = False) -> dict:
         note_files.append((name, md_file))
 
     for name, paths in all_names.items():
+        if name == "_index":
+            continue
         if len(paths) > 1:
             issues["ambiguous_names"].append(
                 f"Name '{name}' found in {len(paths)} locations: " +

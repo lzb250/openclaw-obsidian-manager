@@ -6,18 +6,26 @@ All internal note references use `[[note-name]]` format. When creating or moving
 
 ## Frontmatter
 
-Every note must have YAML frontmatter with these fields:
+Every wiki note must have YAML frontmatter. Two levels of schema:
+
+**Universal fields (all pages):**
 
 ```yaml
 ---
-title: Note Title
+type: <concept|entity|source|comparison|question>
+title: "Page Title"
+created: 2026-07-08
+updated: 2026-07-08
 tags: [tag1, tag2]
-created: 2026-07-08 12:00:00
-modified: 2026-07-08 12:00:00
+status: seed | developing | mature | evergreen
+related: ["[[Page A]]"]
+sources: ["[[.raw/source.md]]"]
 ---
 ```
 
-The `create` and `edit` commands auto-inject frontmatter if missing. The `fm` command lets you read/edit/delete individual fields.
+**Type-specific fields** are injected automatically when using `create --type`. See `docs/06-knowledge-structure.md` for full schema details.
+
+The `create` and `edit` commands auto-inject frontmatter. The `fm` command lets you read/edit/delete individual fields.
 
 Date format is configurable in `obsidian-manager.json` under `conventions.frontmatter.date_format`.
 
@@ -27,7 +35,9 @@ Date format is configurable in `obsidian-manager.json` under `conventions.frontm
 |-----------|---------|------------|
 | `attachments/` | Images, PDFs, and other files | `conventions.attachment_dir` |
 | `daily/` | Daily notes | `conventions.daily_dir` |
-| `templates/` | Note templates | `conventions.template_dir` |
+| `_templates/` | Note templates | `conventions.template_dir` |
+| `wiki/` | Knowledge base | `knowledge.wiki_dir` |
+| `.raw/` | Immutable source documents | `knowledge.raw_dir` |
 
 ## Attachments
 

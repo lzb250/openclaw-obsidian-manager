@@ -1412,3 +1412,1569 @@ Expected: all 10 tests pass
 git add -A
 git diff --cached --quiet; if ($LASTEXITCODE -ne 0) { git commit -m "chore: final review and cleanup" }
 ```
+
+---
+
+## Phase 2: Knowledge Base System Additions
+
+### Task 11: Extend Conventions Module with Per-Type Frontmatter
+
+**Files:**
+- Modify: `scripts/conventions.py`
+- Modify: `scripts/test_conventions.py`
+
+**Interfaces:**
+- Consumes: existing `generate_frontmatter` (Task 2)
+- Produces:
+  - `FRONTMATTER_SCHEMAS: dict` — mapping of page type to extra fields
+  - `generate_frontmatter_by_type(page_type: str, title: str, tags: list[str], config: dict) -> str`
+  - `get_wiki_subdir(page_type: str, config: dict) -> str` — returns subdirectory for page type
+  - `get_template_path(page_type: str) -> Path` — returns path to project template file
+
+- [ ] **Step 1: Add schemas and new functions to `scripts/conventions.py`**
+
+Append after existing code:
+
+```python
+FRONTMATTER_SCHEMAS = {
+    "source": {
+        "extra_fields": [
+            "source_type", "author", "date_published", "url",
+            "confidence", "key_claims",
+        ],
+        "type": "source",
+    },
+    "entity": {
+        "extra_fields": [
+            "entity_type", "role", "first_mentioned",
+        ],
+        "type": "entity",
+    },
+    "concept": {
+        "extra_fields": [
+            "complexity", "domain", "aliases",
+        ],
+        "type": "concept",
+    },
+    "comparison": {
+        "extra_fields": [
+            "subjects", "dimensions", "verdict",
+        ],
+        "type": "comparison",
+    },
+    "question": {
+        "extra_fields": [
+            "question", "answer_quality",
+        ],
+        "type": "question",
+    },
+}
+
+UNIVERSAL_FIELDS = ["type", "title", "tags", "created", "modified", "status", "related", "sources"]
+
+
+def generate_frontmatter_by_type(page_type: str, title: str, tags: list[str], config: dict) -> str:
+    schema = FRONTMATTER_SCHEMAS.get(page_type, {})
+    fmt = config["conventions"]["frontmatter"]["date_format"]
+    now = datetime.now().strftime(fmt)
+    lines = ["---"]
+    for field in UNIVERSAL_FIELDS:
+        if field == "type":
+            lines.append(f"type: {schema.get('type', page_type)}")
+        elif field == "title":
+            lines.append(f"title: {title}")
+        elif field == "tags":
+            tag_str = ", ".join(tags) if tags else ""
+            lines.append(f"tags: [{tag_str}]")
+        elif field == "created":
+            lines.append(f"created: {now}")
+        elif field == "modified":
+            lines.append(f"modified: {now}")
+        elif field == "status":
+            lines.append("status: seed")
+        elif field == "related":
+            lines.append("related: []")
+        elif field == "sources":
+            lines.append("sources: []")
+    for field in schema.get("extra_fields", []):
+        if field == "complexity":
+            lines.append("complexity: basic")
+        elif field == "aliases":
+            lines.append("aliases: []")
+        elif field == "entity_type":
+            lines.append("entity_type: ")
+        elif field == "role":
+            lines.append("role: ")
+        elif field == "subjects":
+            lines.append("subjects: []")
+        elif field == "dimensions":
+            lines.append("dimensions: []")
+        elif field == "verdict":
+            lines.append("verdict: ")
+        elif field == "confidence":
+            lines.append("confidence: medium")
+        elif field == "answer_quality":
+            lines.append("answer_quality: draft")
+        elif field == "key_claims":
+            lines.append("key_claims: []")
+        else:
+            lines.append(f"{field}: ")
+    lines.append("---")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def get_wiki_subdir(page_type: str, config: dict) -> str:
+    wiki_dir = config.get("knowledge", {}).get("wiki_dir", "wiki")
+    subdirs = {
+        "concept": "concepts",
+        "entity": "entities",
+        "source": "sources",
+        "comparison": "comparisons",
+        "question": "questions",
+    }
+    sub = subdirs.get(page_type, "")
+    if sub:
+        return f"{wiki_dir}/{sub}"
+    return wiki_dir
+
+
+def get_template_path(page_type: str) -> Path:
+    return Path(__file__).resolve().parent.parent / "_templates" / f"{page_type}.md"
+```
+
+- [ ] **Step 2: Add new test cases to `scripts/test_conventions.py`**
+
+Append before `if __name__ == "__main__":`:
+
+```python
+    def test_generate_frontmatter_by_type_concept(self):
+        fm = generate_frontmatter_by_type("concept", "Test", [], self.config)
+        self.assertIn("type: concept", fm)
+        self.assertIn("status: seed", fm)
+        self.assertIn("complexity: basic", fm)
+        self.assertIn("aliases: []", fm)
+        self.assertIn("related: []", fm)
+        self.assertIn("sources: []", fm)
+
+    def test_generate_frontmatter_by_type_source(self):
+        fm = generate_frontmatter_by_type("source", "Source Note", [], self.config)
+        self.assertIn("type: source", fm)
+        self.assertIn("confidence: medium", fm)
+        self.assertIn("key_claims: []", fm)
+        self.assertIn("source_type: ", fm)
+
+    def test_generate_frontmatter_by_type_entity(self):
+        fm = generate_frontmatter_by_type("entity", "Person", [], self.config)
+        self.assertIn("type: entity", fm)
+        self.assertIn("entity_type: ", fm)
+        self.assertIn("role: ", fm)
+
+    def test_generate_frontmatter_by_type_comparison(self):
+        fm = generate_frontmatter_by_type("comparison", "A vs B", [], self.config)
+        self.assertIn("type: comparison", fm)
+        self.assertIn("subjects: []", fm)
+        self.assertIn("verdict: ", fm)
+
+    def test_generate_frontmatter_by_type_question(self):
+        fm = generate_frontmatter_by_type("question", "What is X?", [], self.config)
+        self.assertIn("type: question", fm)
+        self.assertIn("answer_quality: draft", fm)
+        self.assertIn("question: ", fm)
+
+    def test_get_wiki_subdir(self):
+        self.assertEqual(get_wiki_subdir("concept", self.config), "wiki/concepts")
+        self.assertEqual(get_wiki_subdir("entity", self.config), "wiki/entities")
+        self.assertEqual(get_wiki_subdir("source", self.config), "wiki/sources")
+        self.assertEqual(get_wiki_subdir("unknown", self.config), "wiki")
+
+    def test_get_template_path(self):
+        path = get_template_path("concept")
+        self.assertTrue(str(path).endswith("_templates\\concept.md") or
+                        str(path).endswith("_templates/concept.md"))
+```
+
+**Expected**: 13 tests total (6 original + 7 new)
+
+- [ ] **Step 3: Run all tests and verify pass**
+
+```bash
+python -m scripts.test_conventions
+```
+Expected: 13 tests PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/conventions.py scripts/test_conventions.py
+git commit -m "feat: add per-type frontmatter schemas and wiki subdir resolution"
+```
+
+---
+
+### Task 12: Create Template Files
+
+**Files:**
+- Create: `_templates/concept.md`
+- Create: `_templates/entity.md`
+- Create: `_templates/source.md`
+- Create: `_templates/comparison.md`
+- Create: `_templates/question.md`
+- Create: `_templates/daily.md`
+
+- [ ] **Step 1: Create `_templates/concept.md`**
+
+```markdown
+---
+type: concept
+title: "{{title}}"
+created: {{date}}
+updated: {{date}}
+tags: []
+status: seed
+complexity: basic
+domain: ""
+aliases: []
+related: []
+sources: []
+---
+
+# {{title}}
+
+## Overview
+
+## Key Ideas
+
+## Connections
+```
+
+- [ ] **Step 2: Create `_templates/entity.md`**
+
+```markdown
+---
+type: entity
+title: "{{title}}"
+created: {{date}}
+updated: {{date}}
+tags: []
+status: seed
+entity_type: ""
+role: ""
+first_mentioned: ""
+related: []
+sources: []
+---
+
+# {{title}}
+
+## Profile
+
+## Role / Significance
+
+## Relationships
+```
+
+- [ ] **Step 3: Create `_templates/source.md`**
+
+```markdown
+---
+type: source
+title: "{{title}}"
+created: {{date}}
+updated: {{date}}
+tags: []
+status: seed
+source_type: ""
+author: ""
+date_published: ""
+url: ""
+confidence: medium
+key_claims: []
+related: []
+sources: []
+---
+
+# {{title}}
+
+## Summary
+
+## Key Claims
+
+## Notes
+```
+
+- [ ] **Step 4: Create `_templates/comparison.md`**
+
+```markdown
+---
+type: comparison
+title: "{{title}}"
+created: {{date}}
+updated: {{date}}
+tags: []
+status: seed
+subjects: []
+dimensions: []
+verdict: ""
+related: []
+sources: []
+---
+
+# {{title}}
+
+## Context
+
+## Comparison
+
+| Dimension | A | B |
+|-----------|---|---|
+
+## Verdict
+```
+
+- [ ] **Step 5: Create `_templates/question.md`**
+
+```markdown
+---
+type: question
+title: "{{title}}"
+created: {{date}}
+updated: {{date}}
+tags: []
+status: seed
+question: ""
+answer_quality: draft
+related: []
+sources: []
+---
+
+# {{title}}
+
+## Question
+
+## Answer
+
+## References
+```
+
+- [ ] **Step 6: Create `_templates/daily.md`**
+
+```markdown
+---
+type: daily
+title: "{{title}}"
+created: {{date}}
+updated: {{date}}
+tags: [daily]
+---
+
+# {{title}}
+
+## Tasks
+
+- [ ] 
+
+## Notes
+
+## Reflections
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add _templates/
+git commit -m "feat: add note templates for 6 page types"
+```
+
+---
+
+### Task 13: Extend Config with Knowledge Section
+
+**Files:**
+- Modify: `obsidian-manager.json`
+
+- [ ] **Step 1: Update `obsidian-manager.json`**
+
+Replace current content:
+
+```json
+{
+  "vault": {
+    "path": "",
+    "name": ""
+  },
+  "git": {
+    "remote": "",
+    "branch": "main",
+    "auto_sync_minutes": 30
+  },
+  "conventions": {
+    "attachment_dir": "attachments",
+    "daily_dir": "daily",
+    "template_dir": "templates",
+    "frontmatter": {
+      "date_format": "YYYY-MM-DD HH:mm:ss"
+    },
+    "wikilinks": true
+  },
+  "knowledge": {
+    "wiki_dir": "wiki",
+    "raw_dir": ".raw",
+    "hot_cache_words": 500,
+    "stale_days": 90
+  }
+}
+```
+
+Note: `required_fields` removed from `frontmatter` since we now use per-type schemas.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add obsidian-manager.json
+git commit -m "feat: add knowledge config section, remove required_fields from frontmatter"
+```
+
+---
+
+### Task 14: Implement Init Vault Script
+
+**Files:**
+- Create: `scripts/init_vault.py`
+
+**Interfaces:**
+- Consumes: `config.load_config`, `sync.init_repo`
+- Produces: `run_init(config: dict) -> None`
+
+- [ ] **Step 1: Create `scripts/init_vault.py`**
+
+```python
+import shutil
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+
+from scripts.config import load_config
+from scripts.sync import init_repo
+
+
+WIKI_DIRS = [
+    "concepts",
+    "entities",
+    "sources",
+    "questions",
+    "comparisons",
+    "domains",
+    "meta",
+]
+
+OBSIDIAN_APP_JSON = """{
+  "newFileLocation": "folder",
+  "newFileFolderPath": "wiki",
+  "attachmentFolderPath": "attachments",
+  "showUnsupportedFiles": false,
+  "userIgnoreFilters": [
+    ".raw/",
+    "_templates/",
+    "scripts/",
+    ".vault-meta/"
+  ]
+}
+"""
+
+OBSIDIAN_GRAPH_JSON = """{
+  "collapse-filter": false,
+  "search": "",
+  "showTags": true,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    {"query": "path:wiki/entities", "color": {"a":1,"rgb":10453373}},
+    {"query": "path:wiki/concepts", "color": {"a":1,"rgb":6723867}},
+    {"query": "path:wiki/sources", "color": {"a":1,"rgb":16751001}},
+    {"query": "path:wiki/questions", "color": {"a":1,"rgb":5292279}},
+    {"query": "path:wiki/comparisons", "color": {"a":1,"rgb":13698265}},
+    {"query": "path:wiki/domains", "color": {"a":1,"rgb":4360569}},
+    {"query": "path:wiki/meta", "color": {"a":1,"rgb":10027263}}
+  ],
+  "collapse-display": false,
+  "showArrow": true,
+  "textFadeMultiplier": 0,
+  "nodeSizeMultiplier": 1,
+  "lineSizeMultiplier": 1,
+  "collapse-forces": false,
+  "centerStrength": 0.518713248970312,
+  "repelStrength": 10,
+  "linkStrength": 1,
+  "linkDistance": 250,
+  "scale": 1,
+  "close": true
+}
+"""
+
+OBSIDIAN_APPEARANCE_JSON = """{
+  "cssTheme": "",
+  "baseFontSize": 16,
+  "enabledCssSnippets": []
+}
+"""
+
+
+def run_init(config: dict) -> None:
+    vault_path = Path(config["vault"]["path"])
+    wiki_dir = config.get("knowledge", {}).get("wiki_dir", "wiki")
+    raw_dir = config.get("knowledge", {}).get("raw_dir", ".raw")
+
+    if not vault_path.exists():
+        print(f"Vault path does not exist: {vault_path}", file=sys.stderr)
+        print("Create the vault directory first or run:", file=sys.stderr)
+        print(f"  python scripts/obsidian_mgr.py config --set vault.path <path>", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Initializing vault at {vault_path}...")
+
+    # 1. Create directory structure
+    wiki_path = vault_path / wiki_dir
+    raw_path = vault_path / raw_dir
+    templates_path = vault_path / "_templates"
+    attachments_path = vault_path / config["conventions"]["attachment_dir"]
+    obsidian_dir = vault_path / ".obsidian"
+
+    for d in WIKI_DIRS:
+        (wiki_path / d).mkdir(parents=True, exist_ok=True)
+    raw_path.mkdir(parents=True, exist_ok=True)
+    templates_path.mkdir(parents=True, exist_ok=True)
+    attachments_path.mkdir(parents=True, exist_ok=True)
+    obsidian_dir.mkdir(parents=True, exist_ok=True)
+    print("  Created directory structure")
+
+    # 2. Write Obsidian config
+    (obsidian_dir / "app.json").write_text(OBSIDIAN_APP_JSON.lstrip(), encoding="utf-8")
+    (obsidian_dir / "graph.json").write_text(OBSIDIAN_GRAPH_JSON.lstrip(), encoding="utf-8")
+    (obsidian_dir / "appearance.json").write_text(OBSIDIAN_APPEARANCE_JSON.lstrip(), encoding="utf-8")
+    print("  Wrote Obsidian configuration")
+
+    # 3. Copy templates from project to vault
+    project_templates = Path(__file__).resolve().parent.parent / "_templates"
+    if project_templates.exists():
+        for tf in project_templates.glob("*.md"):
+            dest = templates_path / tf.name
+            content = tf.read_text(encoding="utf-8")
+            dest.write_text(content, encoding="utf-8")
+        print("  Copied templates")
+
+    # 4. Create seed wiki pages
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    date_only = datetime.now().strftime("%Y-%m-%d")
+
+    _index_content = """---
+type: index
+title: "{title}"
+created: {now}
+updated: {now}
+tags: []
+---
+
+# {title}
+
+Index of {title_lower} pages.
+"""
+
+    for wd in WIKI_DIRS:
+        title = wd.capitalize()
+        (wiki_path / wd / "_index.md").write_text(
+            _index_content.format(title=title, now=now, title_lower=wd),
+            encoding="utf-8",
+        )
+
+    (wiki_path / "index.md").write_text(f"""---
+type: index
+title: "Vault Index"
+created: {now}
+updated: {now}
+tags: [meta]
+---
+
+# Vault Index
+
+## Concepts
+
+## Entities
+
+## Sources
+
+## Questions
+
+## Comparisons
+
+## Domains
+
+## Meta
+""", encoding="utf-8")
+
+    (wiki_path / "hot.md").write_text(f"""---
+type: meta
+title: "Hot Cache"
+created: {now}
+updated: {now}
+tags: [meta]
+---
+
+# Hot Cache
+
+## Last Updated
+{date_only}
+
+## Key Recent Facts
+
+## Recent Changes
+
+## Active Threads
+""", encoding="utf-8")
+
+    (wiki_path / "log.md").write_text(f"""---
+type: meta
+title: "Operation Log"
+created: {now}
+updated: {now}
+tags: [meta]
+---
+
+# Operation Log
+
+## {now} — Vault initialized
+""", encoding="utf-8")
+
+    (wiki_path / "overview.md").write_text(f"""---
+type: overview
+title: "Vault Overview"
+created: {now}
+updated: {now}
+tags: [meta]
+---
+
+# Vault Overview
+
+This vault is managed by openclaw-obsidian-manager.
+
+## Structure
+
+- **wiki/** — Knowledge base
+- **.raw/** — Immutable source documents
+- **_templates/** — Note templates
+- **attachments/** — Images and files
+""", encoding="utf-8")
+
+    print("  Created seed wiki pages")
+
+    # 5. Initialize git
+    remote = config["git"]["remote"]
+    branch = config["git"]["branch"]
+    if remote:
+        init_repo(vault_path, remote, branch)
+        print("  Initialized git repository")
+
+    # 6. Register vault with notesmd-cli
+    result = subprocess.run(
+        ["notesmd-cli", "add-vault", str(vault_path), "--set-default"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        print(f"  Warning: Could not register vault with notesmd-cli: {result.stderr.strip()}")
+    else:
+        print("  Registered vault with notesmd-cli")
+
+    print(f"\nVault initialized: {vault_path}")
+    print("Next steps:")
+    print("  - Open the vault in Obsidian")
+    print("  - Start creating notes with: python scripts/obsidian_mgr.py create <name> --type concept")
+```
+
+- [ ] **Step 2: Write test `scripts/test_init_vault.py`**
+
+```python
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from scripts.init_vault import WIKI_DIRS
+
+
+class TestInitVault(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.config = {
+            "vault": {"path": str(self.tmp), "name": "test-vault"},
+            "git": {"remote": "", "branch": "main", "auto_sync_minutes": 30},
+            "conventions": {
+                "attachment_dir": "attachments",
+                "daily_dir": "daily",
+                "template_dir": "templates",
+                "frontmatter": {"date_format": "YYYY-MM-DD HH:mm:ss"},
+                "wikilinks": True,
+            },
+            "knowledge": {
+                "wiki_dir": "wiki",
+                "raw_dir": ".raw",
+                "hot_cache_words": 500,
+                "stale_days": 90,
+            },
+        }
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    @patch("scripts.init_vault.subprocess.run")
+    def test_run_init_creates_structure(self, mock_run):
+        mock_run.return_value.returncode = 0
+        from scripts.init_vault import run_init
+        run_init(self.config)
+
+        wiki_path = self.tmp / "wiki"
+        self.assertTrue(wiki_path.exists())
+        for d in WIKI_DIRS:
+            self.assertTrue((wiki_path / d).exists(), f"Missing: {d}")
+
+        self.assertTrue((self.tmp / ".raw").exists())
+        self.assertTrue((self.tmp / "_templates").exists())
+        self.assertTrue((self.tmp / "attachments").exists())
+        self.assertTrue((self.tmp / ".obsidian" / "app.json").exists())
+        self.assertTrue((self.tmp / ".obsidian" / "graph.json").exists())
+        self.assertTrue((wiki_path / "index.md").exists())
+        self.assertTrue((wiki_path / "hot.md").exists())
+        self.assertTrue((wiki_path / "log.md").exists())
+        self.assertTrue((wiki_path / "overview.md").exists())
+
+    @patch("scripts.init_vault.subprocess.run")
+    def test_run_init_seed_pages_have_frontmatter(self, mock_run):
+        mock_run.return_value.returncode = 0
+        from scripts.init_vault import run_init
+        run_init(self.config)
+
+        for name in ["index.md", "hot.md", "log.md", "overview.md"]:
+            content = (self.tmp / "wiki" / name).read_text(encoding="utf-8")
+            self.assertTrue(content.startswith("---"), f"{name} missing frontmatter")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+- [ ] **Step 3: Run tests**
+
+```bash
+python -m scripts.test_init_vault
+```
+Expected: 2 tests PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/init_vault.py scripts/test_init_vault.py
+git commit -m "feat: add init_vault.py (directory scaffold, Obsidian config, templates, seed pages, git init)"
+```
+
+---
+
+### Task 15: Implement Lint Script
+
+**Files:**
+- Create: `scripts/lint.py`
+
+**Interfaces:**
+- Consumes: `config.load_config`
+- Produces: `run_lint(config: dict, fix: bool = False) -> dict`
+
+- [ ] **Step 1: Create `scripts/lint.py`**
+
+```python
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from scripts.config import load_config
+
+
+def _parse_frontmatter(content: str) -> tuple[dict, str]:
+    if not content.startswith("---"):
+        return {}, content
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        return {}, content
+    fm_lines = parts[1].strip().split("\n")
+    body = parts[2].strip()
+    fm = {}
+    for line in fm_lines:
+        if ":" in line:
+            key, _, val = line.partition(":")
+            fm[key.strip()] = val.strip()
+    return fm, body
+
+
+def _find_wikilinks(content: str) -> list[str]:
+    import re
+    links = re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", content)
+    return [link.split("#")[0].split("|")[0].strip() for link in links]
+
+
+def run_lint(config: dict, fix: bool = False) -> dict:
+    vault_path = Path(config["vault"]["path"])
+    wiki_dir = config.get("knowledge", {}).get("wiki_dir", "wiki")
+    stale_days = config.get("knowledge", {}).get("stale_days", 90)
+    wiki_path = vault_path / wiki_dir
+
+    if not wiki_path.exists():
+        print(f"Wiki directory not found: {wiki_path}", file=sys.stderr)
+        return {"error": "wiki directory not found"}
+
+    issues = {
+        "orphans": [],
+        "dead_links": [],
+        "stale": [],
+        "missing_fm": [],
+        "type_mismatch": [],
+        "empty_pages": [],
+        "index_stale": [],
+        "ambiguous_names": [],
+    }
+
+    all_pages = {}       # name -> full path
+    all_names = {}       # name -> list of paths (for ambiguity detection)
+    page_fm = {}         # path -> frontmatter dict
+    page_bodies = {}     # path -> body text
+    note_files = []      # list of (name, path)
+
+    for md_file in wiki_path.rglob("*.md"):
+        if ".obsidian" in str(md_file) or ".git" in str(md_file.parts):
+            continue
+        name = md_file.stem
+        all_pages[name] = md_file
+        if name not in all_names:
+            all_names[name] = []
+        all_names[name].append(md_file)
+        content = md_file.read_text(encoding="utf-8")
+        fm, body = _parse_frontmatter(content)
+        page_fm[str(md_file)] = fm
+        page_bodies[str(md_file)] = body
+        note_files.append((name, md_file))
+
+    # 1. Ambiguous names
+    for name, paths in all_names.items():
+        if len(paths) > 1:
+            issues["ambiguous_names"].append(
+                f"Name '{name}' found in {len(paths)} locations: " +
+                ", ".join(str(p.relative_to(vault_path)) for p in paths)
+            )
+
+    # 2. Missing frontmatter
+    for name, path in note_files:
+        fm = page_fm[str(path)]
+        required = ["type", "title", "created", "updated"]
+        missing = [f for f in required if f not in fm]
+        if missing:
+            issues["missing_fm"].append(
+                f"{path.relative_to(vault_path)} — missing: {', '.join(missing)}"
+            )
+
+    # 3. Type mismatch (type vs directory)
+    type_to_dir = {
+        "concept": "concepts",
+        "entity": "entities",
+        "source": "sources",
+        "question": "questions",
+        "comparison": "comparisons",
+    }
+    for name, path in note_files:
+        fm = page_fm[str(path)]
+        page_type = fm.get("type", "")
+        if page_type in type_to_dir:
+            expected_dir_name = type_to_dir[page_type]
+            if wiki_dir:
+                expected_rel = f"{wiki_dir}/{expected_dir_name}"
+            else:
+                expected_rel = expected_dir_name
+            parent_name = path.parent.name
+            if parent_name != expected_dir_name and parent_name != wiki_dir:
+                issues["type_mismatch"].append(
+                    f"{path.relative_to(vault_path)} — type={page_type} but in dir '{parent_name}'"
+                )
+
+    # 4. Empty pages (frontmatter only, no body)
+    for name, path in note_files:
+        body = page_bodies[str(path)]
+        if not body:
+            issues["empty_pages"].append(
+                f"{path.relative_to(vault_path)}"
+            )
+
+    # 5. Dead links
+    all_referenced = set()
+    for name, path in note_files:
+        full_content = path.read_text(encoding="utf-8")
+        links = _find_wikilinks(full_content)
+        for link in links:
+            all_referenced.add(link)
+            cleaned = link.split("/")[-1] if "/" in link else link
+            if cleaned not in all_pages:
+                issues["dead_links"].append(
+                    f"{path.relative_to(vault_path)} → [[{link}]] (not found)"
+                )
+
+    # 6. Orphan pages (no incoming wikilinks)
+    for name, path in note_files:
+        ref_key = str(path.relative_to(wiki_path))
+        is_referenced = name in all_referenced or ref_key in all_referenced
+        fm = page_fm[str(path)]
+        if not is_referenced and name not in ["index", "hot", "log", "overview", "_index"]:
+            if fm.get("type") not in ["index", "meta", "overview"]:
+                issues["orphans"].append(
+                    f"{path.relative_to(vault_path)} — no incoming links"
+                )
+
+    # 7. Stale content
+    now = datetime.now()
+    stale_threshold = now - timedelta(days=stale_days)
+    for name, path in note_files:
+        fm = page_fm[str(path)]
+        updated_str = fm.get("updated", "")
+        try:
+            updated = datetime.strptime(updated_str, "%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError):
+            try:
+                updated = datetime.strptime(updated_str, "%Y-%m-%d")
+            except (ValueError, TypeError):
+                continue
+        status = fm.get("status", "")
+        if status in ("mature", "evergreen") and updated < stale_threshold:
+            issues["stale"].append(
+                f"{path.relative_to(vault_path)} — last updated {updated_str}"
+            )
+
+    # 8. Index stale (index references deleted pages)
+    index_path = wiki_path / "index.md"
+    if index_path.exists():
+        index_content = index_path.read_text(encoding="utf-8")
+        index_links = _find_wikilinks(index_content)
+        for link in index_links:
+            if link not in all_pages:
+                issues["index_stale"].append(
+                    f"index.md → [[{link}]] (page not found)"
+                )
+
+    # Print report
+    total = sum(len(v) for v in issues.values())
+    print(f"Lint Report — {total} issue(s) found\n")
+
+    labels = {
+        "orphans": "Orphan Pages (no incoming links)",
+        "dead_links": "Dead Links",
+        "stale": "Stale Content",
+        "missing_fm": "Missing Frontmatter",
+        "type_mismatch": "Type Mismatch",
+        "empty_pages": "Empty Pages",
+        "index_stale": "Stale Index Entries",
+        "ambiguous_names": "Ambiguous Names",
+    }
+
+    for key, label in labels.items():
+        items = issues[key]
+        if items:
+            print(f"## {label} ({len(items)})")
+            for item in items:
+                print(f"  - {item}")
+            print()
+
+    if total == 0:
+        print("All clear!")
+
+    meta_dir = wiki_path / "meta"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    report_path = meta_dir / "lint-report.md"
+    report = [f"# Lint Report — {now.strftime('%Y-%m-%d %H:%M:%S')}", ""]
+    report.append(f"Total issues: {total}\n")
+    for key, label in labels.items():
+        items = issues[key]
+        if items:
+            report.append(f"## {label} ({len(items)})")
+            for item in items:
+                report.append(f"- {item}")
+            report.append("")
+    if total == 0:
+        report.append("All clear!")
+    report_path.write_text("\n".join(report), encoding="utf-8")
+    print(f"\nReport saved to {report_path.relative_to(vault_path)}")
+
+    return issues
+```
+
+- [ ] **Step 2: Write test `scripts/test_lint.py`**
+
+```python
+import tempfile
+import unittest
+from pathlib import Path
+
+from scripts.lint import run_lint, _parse_frontmatter, _find_wikilinks
+
+
+class TestLintBasics(unittest.TestCase):
+    def test_parse_frontmatter_normal(self):
+        fm, body = _parse_frontmatter("---\ntype: concept\ntitle: Test\n---\n\n# Hello")
+        self.assertEqual(fm["type"], "concept")
+        self.assertEqual(fm["title"], "Test")
+        self.assertEqual(body, "# Hello")
+
+    def test_parse_frontmatter_none(self):
+        fm, body = _parse_frontmatter("# No frontmatter")
+        self.assertEqual(fm, {})
+        self.assertEqual(body, "# No frontmatter")
+
+    def test_find_wikilinks(self):
+        links = _find_wikilinks("See [[Page A]] and [[folder/Page B]]. Also [[Page C|alias]].")
+        self.assertIn("Page A", links)
+        self.assertIn("folder/Page B", links)
+        self.assertIn("Page C", links)
+
+    def test_run_lint_empty_wiki(self):
+        import shutil
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True)
+            config = {
+                "vault": {"path": str(tmp), "name": "test"},
+                "knowledge": {"wiki_dir": "wiki", "raw_dir": ".raw", "stale_days": 90},
+            }
+            result = run_lint(config)
+            self.assertIsInstance(result, dict)
+            total = sum(len(v) for v in result.values())
+            self.assertEqual(total, 0, f"Expected 0 issues in empty wiki, got {total}")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+- [ ] **Step 3: Run tests and verify**
+
+```bash
+python -m scripts.test_lint
+```
+Expected: 4 tests PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/lint.py scripts/test_lint.py
+git commit -m "feat: add lint.py (8-category vault health check)"
+```
+
+---
+
+### Task 16: Add --type Support to Vault and CLI Integration
+
+**Files:**
+- Modify: `scripts/vault.py` — add `type` parameter to `create_note`
+- Modify: `scripts/obsidian_mgr.py` — add `init`, `lint`, `--type` to create
+
+- [ ] **Step 1: Modify `create_note` in `scripts/vault.py`**
+
+Replace the existing `create_note` function:
+
+```python
+def create_note(config: dict, name: str, content: str = None, open_note: bool = False, page_type: str = None) -> None:
+    vault_name = _get_vault_name(config)
+    vault_path = Path(config["vault"]["path"])
+
+    if page_type:
+        from scripts.conventions import get_wiki_subdir, get_template_path, generate_frontmatter_by_type
+        subdir = get_wiki_subdir(page_type, config)
+        dest_dir = vault_path / subdir
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        target_name = name
+        if not target_name.endswith(".md"):
+            target_name = name + ".md"
+        note_path = dest_dir / target_name
+
+        template_path = get_template_path(page_type)
+        if template_path.exists():
+            template_content = template_path.read_text(encoding="utf-8")
+            from datetime import datetime
+            now = datetime.now().strftime(config["conventions"]["frontmatter"]["date_format"])
+            date_only = datetime.now().strftime("%Y-%m-%d")
+            text = template_content.replace("{{title}}", name).replace("{{date}}", date_only)
+            if content:
+                text += "\n" + content
+        else:
+            fm = generate_frontmatter_by_type(page_type, name, [], config)
+            text = fm + (content or "")
+
+        note_path.write_text(text, encoding="utf-8")
+
+        if open_note:
+            _run_notesmd(["open", str(note_path.relative_to(vault_path)), "--vault", vault_name])
+        print(f"Created: {note_path.relative_to(vault_path)}")
+        return
+
+    note_path = _get_note_path(config, name)
+    args = ["create", name, "--vault", vault_name]
+    if content:
+        args.extend(["--content", content])
+    if open_note:
+        args.append("--open")
+
+    result = _run_notesmd(args)
+    if result.returncode != 0:
+        print(f"Create failed: {result.stderr.strip()}", file=sys.stderr)
+        return
+
+    print(result.stdout.strip())
+
+    if note_path.exists():
+        ensure_frontmatter(note_path, config)
+        _update_frontmatter_date(note_path, config)
+```
+
+- [ ] **Step 2: Add init/lint/--type to `scripts/obsidian_mgr.py`**
+
+Add imports after existing ones:
+
+```python
+from scripts.init_vault import run_init
+from scripts.lint import run_lint
+```
+
+Update `cmd_create`:
+
+```python
+def cmd_create(args):
+    config = load_config()
+    create_note(config, args.name, args.content, args.open, args.type)
+```
+
+Update `p_create` to add `--type`:
+
+```python
+    p_create = subparsers.add_parser("create", help="Create a new note")
+    p_create.add_argument("name", help="Note name or path")
+    p_create.add_argument("--content", help="Note content")
+    p_create.add_argument("--open", action="store_true", help="Open in Obsidian after creation")
+    p_create.add_argument("--type", choices=["concept","entity","source","comparison","question"],
+                          help="Note type (uses template and wiki subdirectory)")
+    p_create.set_defaults(func=cmd_create)
+```
+
+Add `init` and `lint` subcommands before `args = parser.parse_args()`:
+
+```python
+    p_init = subparsers.add_parser("init", help="Initialize vault structure")
+    p_init.set_defaults(func=cmd_init)
+
+    p_lint = subparsers.add_parser("lint", help="Run vault health check")
+    p_lint.add_argument("--fix", action="store_true", help="Auto-fix issues")
+    p_lint.set_defaults(func=cmd_lint)
+```
+
+Add handler functions:
+
+```python
+def cmd_init(args):
+    config = load_config()
+    run_init(config)
+
+
+def cmd_lint(args):
+    config = load_config()
+    run_lint(config, args.fix)
+```
+
+- [ ] **Step 3: Verify CLI help shows new commands**
+
+```bash
+python scripts/obsidian_mgr.py --help
+```
+Expected: `init` and `lint` listed, `create` shows `--type` option
+
+- [ ] **Step 4: Run all existing tests**
+
+```bash
+python -m scripts.test_conventions; python -m scripts.test_sync; python -m scripts.test_vault; python -m scripts.test_init_vault; python -m scripts.test_lint
+```
+Expected: all tests pass (13 + 1 + 3 + 2 + 4 = 23 tests)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/vault.py scripts/obsidian_mgr.py
+git commit -m "feat: add --type support to create, init and lint CLI commands"
+```
+
+---
+
+### Task 17: Update Documentation
+
+**Files:**
+- Create: `docs/06-knowledge-structure.md`
+- Modify: `docs/02-conventions.md`
+
+- [ ] **Step 1: Create `docs/06-knowledge-structure.md`**
+
+```markdown
+# Knowledge Base Structure
+
+## Directory Layout
+
+```
+wiki/
+├── index.md            # Master catalog: all pages by type with one-line summaries
+├── hot.md              # Hot cache: ~500-word recent context summary
+├── log.md              # Append-only operation log (newest at top)
+├── overview.md         # Vault summary
+├── concepts/           # Ideas, patterns, frameworks (+ _index.md)
+├── entities/           # People, orgs, products, repositories (+ _index.md)
+├── sources/            # Source document summaries (+ _index.md)
+├── questions/          # Filed answers (+ _index.md)
+├── comparisons/        # Side-by-side analyses (+ _index.md)
+├── domains/            # Top-level topic areas (+ _index.md)
+└── meta/               # Dashboards, lint reports (+ _index.md)
+```
+
+## Page Types
+
+### concept — Ideas, patterns, frameworks
+
+```yaml
+type: concept
+complexity: basic | intermediate | advanced
+domain: ""
+aliases: []
+```
+
+### entity — People, organizations, products
+
+```yaml
+type: entity
+entity_type: person | organization | product | repository
+role: ""
+first_mentioned: ""
+```
+
+### source — Source document summaries
+
+```yaml
+type: source
+source_type: article | book | video | podcast | paper
+author: ""
+date_published: ""
+url: ""
+confidence: high | medium | low
+key_claims: []
+```
+
+### comparison — Side-by-side analyses
+
+```yaml
+type: comparison
+subjects: []
+dimensions: []
+verdict: ""
+```
+
+### question — Filed answers
+
+```yaml
+type: question
+question: ""
+answer_quality: draft | solid | definitive
+```
+
+## Status Lifecycle
+
+```
+seed → developing → mature → evergreen
+```
+
+- **seed**: New page, minimal content
+- **developing**: Actively being expanded
+- **mature**: Comprehensive, stable
+- **evergreen**: Requires minimal updates
+
+## Workflows
+
+### Create with type
+
+```
+python scripts/obsidian_mgr.py create "Machine Learning" --type concept
+```
+
+Creates the note in `wiki/concepts/`, uses `_templates/concept.md`, injects per-type frontmatter.
+
+### Lint
+
+```
+python scripts/obsidian_mgr.py lint
+```
+
+Checks 8 categories: orphans, dead links, stale content, missing frontmatter, type mismatches, empty pages, stale index entries, ambiguous names.
+```
+
+- [ ] **Step 2: Update `docs/02-conventions.md`**
+
+Replace the frontmatter section with:
+
+```markdown
+# Obsidian Conventions
+
+## Wikilinks
+
+All internal note references use `[[note-name]]` format. When creating or moving notes, wikilinks are automatically updated by `notesmd-cli`.
+
+## Frontmatter
+
+Every wiki note must have YAML frontmatter. Two levels of schema:
+
+**Universal fields (all pages):**
+
+```yaml
+---
+type: <concept|entity|source|comparison|question>
+title: "Page Title"
+created: 2026-07-08
+updated: 2026-07-08
+tags: [tag1, tag2]
+status: seed | developing | mature | evergreen
+related: ["[[Page A]]"]
+sources: ["[[.raw/source.md]]"]
+---
+```
+
+**Type-specific fields** are injected automatically when using `create --type`. See `docs/06-knowledge-structure.md` for full schema details.
+
+The `create` and `edit` commands auto-inject frontmatter. The `fm` command lets you read/edit/delete individual fields.
+
+Date format is configurable in `obsidian-manager.json` under `conventions.frontmatter.date_format`.
+
+## Directory Structure
+
+| Directory | Purpose | Config Key |
+|-----------|---------|------------|
+| `attachments/` | Images, PDFs, and other files | `conventions.attachment_dir` |
+| `daily/` | Daily notes | `conventions.daily_dir` |
+| `_templates/` | Note templates | `conventions.template_dir` |
+| `wiki/` | Knowledge base | `knowledge.wiki_dir` |
+| `.raw/` | Immutable source documents | `knowledge.raw_dir` |
+
+## Attachments
+
+Use `attach` to copy files into the vault. The command copies the file to the configured attachment directory and returns a wikilink reference:
+
+```
+> python scripts/obsidian_mgr.py attach "C:/Users/me/photo.png"
+[[attachments/photo.png]]
+```
+```
+
+- [ ] **Step 3: Update `docs/01-init.md`**
+
+Replace with:
+
+```markdown
+# Initialization
+
+## Prerequisites
+
+1. **notesmd-cli**: Install the CLI tool for your platform:
+   - Windows (PowerShell):
+     ```
+     scoop bucket add scoop-yakitrak https://github.com/yakitrak/scoop-yakitrak.git
+     scoop install notesmd-cli
+     ```
+   - macOS / Linux:
+     ```
+     brew tap yakitrak/yakitrak
+     brew install yakitrak/yakitrak/notesmd-cli
+     ```
+
+2. **git**: Must be installed and available on PATH.
+
+3. **Obsidian vault**: Create an empty directory for your vault.
+
+## One-Click Setup
+
+```
+python scripts/obsidian_mgr.py config --set vault.path "D:/obsidianDate/my-vault"
+python scripts/obsidian_mgr.py config --set vault.name "my-vault"
+python scripts/obsidian_mgr.py config --set git.remote "https://github.com/user/my-vault.git"
+python scripts/obsidian_mgr.py init
+```
+
+This performs:
+1. Creates `wiki/` directory structure (concepts, entities, sources, etc.)
+2. Writes Obsidian configuration (app.json, graph.json, appearance.json)
+3. Copies templates from project to vault's `_templates/`
+4. Creates seed wiki pages (index.md, hot.md, log.md, overview.md)
+5. Initializes git repository
+6. Registers vault with notesmd-cli
+
+## Verify Setup
+
+```
+python scripts/obsidian_mgr.py config --show
+python scripts/obsidian_mgr.py list
+```
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add docs/
+git commit -m "docs: add knowledge-structure guide, update conventions and init docs"
+```
+
+---
+
+### Task 18: Update SKILL.md
+
+**Files:**
+- Modify: `SKILL.md`
+
+- [ ] **Step 1: Update `SKILL.md`**
+
+Replace current content:
+
+```markdown
+# Obsidian Manager Skill
+
+Manage an Obsidian vault -- create, edit, search, and organize notes using `notesmd-cli`, with automated git sync, knowledge base structure, and health checks.
+
+## Scheduled Tasks
+
+- `obsidian_sync`: every 30 minutes execute `python scripts/obsidian_mgr.py sync`
+
+## Quick Reference
+
+### Setup
+| Command | Usage |
+|---------|-------|
+| `init` | `python scripts/obsidian_mgr.py init` |
+
+### Notes
+| Command | Usage |
+|---------|-------|
+| `create` | `python scripts/obsidian_mgr.py create <name> [--content "..."] [--type concept|entity|source|comparison|question] [--open]` |
+| `edit` | `python scripts/obsidian_mgr.py edit <name> --content "..." [--append]` |
+| `move` | `python scripts/obsidian_mgr.py move <src> <dest> [--open]` |
+| `delete` | `python scripts/obsidian_mgr.py delete <name>` |
+| `print` | `python scripts/obsidian_mgr.py print <name>` |
+| `daily` | `python scripts/obsidian_mgr.py daily [--content "..."]` |
+
+### Frontmatter
+| Command | Usage |
+|---------|-------|
+| `fm` | `python scripts/obsidian_mgr.py fm <name> --print \| --set key val \| --delete key` |
+
+### Search & Browse
+| Command | Usage |
+|---------|-------|
+| `search` | `python scripts/obsidian_mgr.py search [--name \| --content] <query>` |
+| `list` | `python scripts/obsidian_mgr.py list [path]` |
+
+### Files
+| Command | Usage |
+|---------|-------|
+| `attach` | `python scripts/obsidian_mgr.py attach <file> [--name "..."]` |
+
+### Maintenance
+| Command | Usage |
+|---------|-------|
+| `sync` | `python scripts/obsidian_mgr.py sync` |
+| `lint` | `python scripts/obsidian_mgr.py lint [--fix]` |
+| `config` | `python scripts/obsidian_mgr.py config --show \| --set key val` |
+
+## Documentation
+
+- **First-time setup**: see `docs/01-init.md`
+- **Obsidian conventions**: see `docs/02-conventions.md`
+- **Full command reference**: see `docs/03-commands.md`
+- **Sync mechanism**: see `docs/04-sync.md`
+- **Troubleshooting**: see `docs/05-troubleshooting.md`
+- **Knowledge base structure**: see `docs/06-knowledge-structure.md`
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add SKILL.md
+git commit -m "docs: update SKILL.md with new init/lint commands and --type option"
+```
+
+---
+
+### Task 19: Integration Test
+
+**Files:**
+- No new files — verify end-to-end
+
+- [ ] **Step 1: Run all tests**
+
+```bash
+python -m scripts.test_conventions; python -m scripts.test_sync; python -m scripts.test_vault; python -m scripts.test_init_vault; python -m scripts.test_lint
+```
+Expected: all 23 tests pass
+
+- [ ] **Step 2: Verify CLI help is complete**
+
+```bash
+python scripts/obsidian_mgr.py --help
+python scripts/obsidian_mgr.py init --help
+python scripts/obsidian_mgr.py lint --help
+python scripts/obsidian_mgr.py create --help
+```
+Expected: all subcommands show correct help
+
+- [ ] **Step 3: Test init on a temp vault**
+
+```bash
+python scripts/obsidian_mgr.py config --set vault.path "C:\Users\21920\AppData\Local\Temp\test-vault"
+python scripts/obsidian_mgr.py init
+```
+Expected: creates full structure, no errors
+
+- [ ] **Step 4: Test create --type**
+
+```bash
+python scripts/obsidian_mgr.py create "Test Concept" --type concept
+python scripts/obsidian_mgr.py create "Test Entity" --type entity
+python scripts/obsidian_mgr.py print "Test Concept"
+python scripts/obsidian_mgr.py print "Test Entity"
+```
+Expected: notes created in correct subdirectories with correct frontmatter
+
+- [ ] **Step 5: Test lint**
+
+```bash
+python scripts/obsidian_mgr.py lint
+```
+Expected: report with few/no issues
+
+- [ ] **Step 6: Clean up test vault and restore config**
+
+```bash
+python scripts/obsidian_mgr.py config --set vault.path ""
+Remove-Item -Recurse -Force "C:\Users\21920\AppData\Local\Temp\test-vault"
+```
+
+- [ ] **Step 7: Commit if any changes**
+
+```bash
+git add -A
+git diff --cached --quiet; if ($LASTEXITCODE -ne 0) { git commit -m "chore: integration test fixes" }
+```
