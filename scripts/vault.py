@@ -33,8 +33,39 @@ def _get_note_path(config: dict, name: str) -> Path:
     return note_path
 
 
-def create_note(config: dict, name: str, content: str = None, open_note: bool = False) -> None:
+def create_note(config: dict, name: str, content: str = None, open_note: bool = False, page_type: str = None) -> None:
     vault_name = _get_vault_name(config)
+    vault_path = Path(config["vault"]["path"])
+
+    if page_type:
+        from scripts.conventions import get_wiki_subdir, get_template_path, generate_frontmatter_by_type
+        subdir = get_wiki_subdir(page_type, config)
+        dest_dir = vault_path / subdir
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        target_name = name
+        if not target_name.endswith(".md"):
+            target_name = name + ".md"
+        note_path = dest_dir / target_name
+
+        template_path = get_template_path(page_type)
+        if template_path.exists():
+            template_content = template_path.read_text(encoding="utf-8")
+            from datetime import datetime
+            date_only = datetime.now().strftime("%Y-%m-%d")
+            text = template_content.replace("{{title}}", name).replace("{{date}}", date_only)
+            if content:
+                text += "\n" + content
+        else:
+            fm = generate_frontmatter_by_type(page_type, name, [], config)
+            text = fm + (content or "")
+
+        note_path.write_text(text, encoding="utf-8")
+
+        if open_note:
+            _run_notesmd(["open", str(note_path.relative_to(vault_path)), "--vault", vault_name])
+        print(f"Created: {note_path.relative_to(vault_path)}")
+        return
+
     note_path = _get_note_path(config, name)
 
     args = ["create", name, "--vault", vault_name]

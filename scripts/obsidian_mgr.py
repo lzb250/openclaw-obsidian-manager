@@ -5,6 +5,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.config import load_config, save_config
+from scripts.init_vault import run_init
+from scripts.lint import run_lint
 from scripts.sync import run_sync
 from scripts.vault import (
     attach_file,
@@ -22,7 +24,7 @@ from scripts.vault import (
 
 def cmd_create(args):
     config = load_config()
-    create_note(config, args.name, args.content, args.open)
+    create_note(config, args.name, args.content, args.open, args.type)
 
 
 def cmd_edit(args):
@@ -83,6 +85,16 @@ def cmd_sync(args):
     sys.exit(0 if success else 1)
 
 
+def cmd_init(args):
+    config = load_config()
+    run_init(config)
+
+
+def cmd_lint(args):
+    config = load_config()
+    run_lint(config, args.fix)
+
+
 def cmd_config(args):
     config = load_config()
     if args.show:
@@ -115,6 +127,8 @@ def main():
     p_create.add_argument("name", help="Note name or path")
     p_create.add_argument("--content", help="Note content")
     p_create.add_argument("--open", action="store_true", help="Open in Obsidian after creation")
+    p_create.add_argument("--type", choices=["concept","entity","source","comparison","question"],
+                          help="Note type (uses template and wiki subdirectory)")
     p_create.set_defaults(func=cmd_create)
 
     p_edit = subparsers.add_parser("edit", help="Edit an existing note")
@@ -169,6 +183,13 @@ def main():
 
     p_sync = subparsers.add_parser("sync", help="Sync vault to remote git")
     p_sync.set_defaults(func=cmd_sync)
+
+    p_init = subparsers.add_parser("init", help="Initialize vault structure")
+    p_init.set_defaults(func=cmd_init)
+
+    p_lint = subparsers.add_parser("lint", help="Run vault health check")
+    p_lint.add_argument("--fix", action="store_true", help="Auto-fix issues")
+    p_lint.set_defaults(func=cmd_lint)
 
     p_config = subparsers.add_parser("config", help="Manage configuration")
     p_config.add_argument("--show", action="store_true", help="Display current config")

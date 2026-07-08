@@ -13,9 +13,14 @@
     "daily_dir": "daily",
     "template_dir": "templates",
     "frontmatter": {
-      "required_fields": ["title", "tags", "created", "modified"],
       "date_format": "YYYY-MM-DD HH:mm:ss"
     },
     "wikilinks": true
+  },
+  "knowledge": {
+    "wiki_dir": "wiki",
+    "raw_dir": ".raw",
+    "hot_cache_words": 500,
+    "stale_days": 90
   }
 }
