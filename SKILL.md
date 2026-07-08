@@ -1,6 +1,8 @@
-# Obsidian Manager Skill
-
-Manage an Obsidian vault -- create, edit, search, and organize notes using `notesmd-cli`, with automated git sync, knowledge base structure, and health checks.
+---
+name: openclaw-obsidian-manager
+description: >
+  Manage an Obsidian vault -- create, edit, search, and organize notes using `notesmd-cli`, with automated git sync, knowledge base structure, and health checks.
+---
 
 ## First-Time Setup
 
