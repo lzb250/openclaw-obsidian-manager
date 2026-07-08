@@ -1,6 +1,9 @@
-# Obsidian Manager Skill
+---
+name: obsidian-manager
+description: Manage an Obsidian vault via notesmd-cli — create/edit/search notes, manage frontmatter, handle attachments, enforce wikilinks/folder conventions, auto-sync to remote git every 30 min, run vault health checks, and maintain a structured knowledge base with typed pages and templates.
+---
 
-Manage an Obsidian vault -- create, edit, search, and organize notes using `notesmd-cli`, with automated git sync, knowledge base structure, and health checks.
+# Obsidian Manager Skill
 
 ## First-Time Setup
 
