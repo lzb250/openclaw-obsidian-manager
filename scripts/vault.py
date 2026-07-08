@@ -9,7 +9,9 @@ from scripts.conventions import (
     ensure_frontmatter,
     format_wikilink,
     generate_frontmatter,
+    generate_frontmatter_by_type,
     get_attachment_path,
+    get_wiki_subdir,
 )
 
 
@@ -33,33 +35,216 @@ def _get_note_path(config: dict, name: str) -> Path:
     return note_path
 
 
-def create_note(config: dict, name: str, content: str = None, open_note: bool = False, page_type: str = None) -> None:
+def _parse_fm_lines(content: str) -> tuple[list[str], str, int]:
+    """Return (frontmatter lines, body text, closing --- index)."""
+    if not content.startswith("---"):
+        return [], content, 0
+    lines = content.split("\n")
+    end = 1
+    while end < len(lines) and lines[end].strip() != "---":
+        end += 1
+    fm_lines = lines[1:end]
+    body = "\n".join(lines[end + 1:])
+    return fm_lines, body, end
+
+
+def _write_fm_and_body(fm_lines: list[str], body: str) -> str:
+    return "---\n" + "\n".join(fm_lines) + "\n---\n\n" + body.lstrip("\n")
+
+
+def _add_backlink(target_path: Path, new_wikilink: str) -> None:
+    """Add [[new_wikilink]] to target page's related field."""
+    if not target_path.exists():
+        return
+    content = target_path.read_text(encoding="utf-8")
+    fm_lines, body, _ = _parse_fm_lines(content)
+    quoted = '"' + new_wikilink + '"'
+    for i, line in enumerate(fm_lines):
+        if line.strip().startswith("related:"):
+            val = line.split(":", 1)[1].strip()
+            if val == "[]":
+                fm_lines[i] = f"related: [{quoted}]"
+            elif val.startswith("[") and val.endswith("]"):
+                inner = val[1:-1].strip()
+                if not inner:
+                    fm_lines[i] = f"related: [{quoted}]"
+                else:
+                    fm_lines[i] = f"related: [{inner}, {quoted}]"
+            else:
+                fm_lines[i] = f"related: [{val}, {quoted}]"
+            break
+    target_path.write_text(_write_fm_and_body(fm_lines, body), encoding="utf-8")
+
+
+def _ensure_domain_page(config: dict, domain_name: str) -> Path:
+    """Create domain page if missing, return its path."""
+    vault_path = Path(config["vault"]["path"])
+    wiki_dir = config.get("knowledge", {}).get("wiki_dir", "wiki")
+    domains_dir = vault_path / wiki_dir / "domains"
+    domains_dir.mkdir(parents=True, exist_ok=True)
+    domain_path = domains_dir / f"{domain_name}.md"
+
+    if not domain_path.exists():
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        date_only = datetime.now().strftime("%Y-%m-%d")
+        domain_path.write_text(f"""---
+type: domain
+title: "{domain_name}"
+created: {now}
+updated: {now}
+tags: []
+status: seed
+related: []
+sources: []
+---
+
+# {domain_name}
+
+## Overview
+
+## Subtopics
+
+## Related Pages
+""", encoding="utf-8")
+        print(f"  Created domain page: {domain_path.relative_to(vault_path)}")
+    return domain_path
+
+
+def _update_index(config: dict, note_wikilink: str, page_type: str, summary: str) -> None:
+    """Add an entry to wiki/index.md under the appropriate type section."""
+    vault_path = Path(config["vault"]["path"])
+    wiki_dir = config.get("knowledge", {}).get("wiki_dir", "wiki")
+    index_path = vault_path / wiki_dir / "index.md"
+    if not index_path.exists():
+        return
+
+    content = index_path.read_text(encoding="utf-8")
+    type_headers = {
+        "concept": "## Concepts",
+        "entity": "## Entities",
+        "source": "## Sources",
+        "question": "## Questions",
+        "comparison": "## Comparisons",
+        "domain": "## Domains",
+    }
+    header = type_headers.get(page_type, f"## {page_type.capitalize()}s")
+    entry = f"- {note_wikilink} — {summary}"
+
+    lines = content.split("\n")
+    in_section = False
+    insert_at = None
+    for i, line in enumerate(lines):
+        if line.strip() == header:
+            in_section = True
+        elif in_section and line.strip().startswith("## "):
+            insert_at = i
+            break
+        elif in_section:
+            if line.strip() == entry:
+                return  # already exists
+    if insert_at is None and in_section:
+        insert_at = len(lines)
+
+    if insert_at is not None:
+        lines.insert(insert_at, entry)
+        index_path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _update_subdir_index(config: dict, note_wikilink: str, page_type: str, summary: str) -> None:
+    """Add an entry to wiki/<subdir>/_index.md."""
+    vault_path = Path(config["vault"]["path"])
+    wiki_dir = config.get("knowledge", {}).get("wiki_dir", "wiki")
+    subdir = get_wiki_subdir(page_type, config)
+    index_path = vault_path / subdir / "_index.md"
+    if not index_path.exists():
+        return
+
+    entry = f"- {note_wikilink}"
+    content = index_path.read_text(encoding="utf-8")
+    if entry in content:
+        return
+
+    with open(index_path, "a", encoding="utf-8") as f:
+        f.write(entry + "\n")
+
+
+def _resolve_wikilink_path(config: dict, wikilink: str) -> Path:
+    """Resolve [[Page Name]] or [[subdir/Page Name]] to an absolute file path."""
+    vault_path = Path(config["vault"]["path"])
+    name = wikilink.strip("[]").strip()
+    if "/" in name:
+        candidate = vault_path / (name + ".md" if not name.endswith(".md") else name)
+    else:
+        wiki_dir = config.get("knowledge", {}).get("wiki_dir", "wiki")
+        for root, dirs, files in os.walk(vault_path / wiki_dir):
+            for f in files:
+                if f == f"{name}.md" or f == name:
+                    return Path(root) / f
+        candidate = vault_path / (name + ".md" if not name.endswith(".md") else name)
+    return candidate if candidate.exists() else None
+
+
+import os
+
+
+def create_note(config: dict, name: str, content: str = None, open_note: bool = False,
+                page_type: str = None, domain: str = None, related: list[str] = None) -> None:
     vault_name = _get_vault_name(config)
     vault_path = Path(config["vault"]["path"])
 
     if page_type:
-        from scripts.conventions import get_wiki_subdir, get_template_path, generate_frontmatter_by_type
         subdir = get_wiki_subdir(page_type, config)
         dest_dir = vault_path / subdir
         dest_dir.mkdir(parents=True, exist_ok=True)
-        target_name = name
-        if not target_name.endswith(".md"):
-            target_name = name + ".md"
+        target_name = name if name.endswith(".md") else name + ".md"
         note_path = dest_dir / target_name
 
-        template_path = get_template_path(page_type)
+        template_path = Path(__file__).resolve().parent.parent / "_templates" / f"{page_type}.md"
         if template_path.exists():
             template_content = template_path.read_text(encoding="utf-8")
-            from datetime import datetime
             date_only = datetime.now().strftime("%Y-%m-%d")
             text = template_content.replace("{{title}}", name).replace("{{date}}", date_only)
-            if content:
-                text += "\n" + content
         else:
             fm = generate_frontmatter_by_type(page_type, name, [], config)
-            text = fm + (content or "")
+            text = fm
+
+        # Inject domain and related into frontmatter
+        rel_list = []
+        if domain:
+            rel_list.append(f"[[{domain}]]")
+        if related:
+            rel_list.extend(related)
+        if rel_list:
+            fm_lines, body, _ = _parse_fm_lines(text)
+            entries = ", ".join(f'"{r}"' for r in rel_list)
+            for i, line in enumerate(fm_lines):
+                if line.strip().startswith("related:"):
+                    fm_lines[i] = f"related: [{entries}]"
+                    break
+            text = _write_fm_and_body(fm_lines, body)
+
+        if content:
+            text += "\n" + content
 
         note_path.write_text(text, encoding="utf-8")
+        note_rel = str(note_path.relative_to(vault_path)).replace("\\", "/")
+        note_wikilink = f"[[{note_rel}]]"
+
+        # 1. Handle domain: create domain page, add backlinks
+        if domain:
+            domain_path = _ensure_domain_page(config, domain)
+            _add_backlink(domain_path, note_wikilink)
+
+        # 2. Handle related: add backlinks to target pages
+        if related:
+            for rel in related:
+                target_path = _resolve_wikilink_path(config, rel)
+                if target_path:
+                    _add_backlink(target_path, note_wikilink)
+
+        # 3. Update indexes
+        _update_index(config, note_wikilink, page_type, name)
+        _update_subdir_index(config, note_wikilink, page_type, name)
 
         if open_note:
             _run_notesmd(["open", str(note_path.relative_to(vault_path)), "--vault", vault_name])
@@ -67,7 +252,6 @@ def create_note(config: dict, name: str, content: str = None, open_note: bool = 
         return
 
     note_path = _get_note_path(config, name)
-
     args = ["create", name, "--vault", vault_name]
     if content:
         args.extend(["--content", content])

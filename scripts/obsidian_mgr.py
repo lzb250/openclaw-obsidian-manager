@@ -24,7 +24,7 @@ from scripts.vault import (
 
 def cmd_create(args):
     config = load_config()
-    create_note(config, args.name, args.content, args.open, args.type)
+    create_note(config, args.name, args.content, args.open, args.type, args.domain, args.related)
 
 
 def cmd_edit(args):
@@ -132,6 +132,9 @@ def main():
     p_create.add_argument("--open", action="store_true", help="Open in Obsidian after creation")
     p_create.add_argument("--type", choices=["concept","entity","source","comparison","question"],
                           help="Note type (uses template and wiki subdirectory)")
+    p_create.add_argument("--domain", help="Domain name (creates domain page if missing, adds backlink)")
+    p_create.add_argument("--related", nargs="*", default=None,
+                          help="Related page wikilinks, e.g. --related '[[Page A]]' '[[Page B]]'")
     p_create.set_defaults(func=cmd_create)
 
     p_edit = subparsers.add_parser("edit", help="Edit an existing note")
