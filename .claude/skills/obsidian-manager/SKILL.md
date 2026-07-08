@@ -23,6 +23,33 @@ When the user asks to initialize a vault, set up Obsidian manager, or run setup 
 
 Do NOT load `docs/01-init.md` for routine operations (create, search, sync, lint). Reserve it for first-time setup and re-initialization requests.
 
+## Creating Notes — Categorization Workflow
+
+**Always classify new notes into a domain.** Before creating a note:
+
+1. **List existing domains** in the vault:
+   ```
+   python scripts/obsidian_mgr.py list wiki/domains
+   ```
+
+2. **Analyze the note's content** to determine which domain it belongs to. A note about "茅台股价分析" belongs to "股票知识", not "经济学原理". Choose the most specific matching domain.
+
+3. **If a matching domain exists**, create the note with `--domain`:
+   ```
+   python scripts/obsidian_mgr.py create "茅台股价分析" --type concept --domain "股票知识"
+   ```
+
+4. **If no matching domain exists**, first ask the user if they want to create a new domain, then create both:
+   ```
+   python scripts/obsidian_mgr.py create "股票知识" --type concept --domain "股票知识"
+   python scripts/obsidian_mgr.py create "茅台分析" --type concept --domain "股票知识" --related "[[A股市场]]"
+   ```
+   (The first `create` with `--domain "股票知识"` will auto-create the domain page.)
+
+5. **Use `--related`** to link to other related notes when appropriate.
+
+**Rule: Every typed note MUST have a `--domain`. Never create a note without specifying its domain.**
+
 ## Scheduled Tasks
 
 - `obsidian_sync`: every 30 minutes execute `python scripts/obsidian_mgr.py sync`
@@ -37,7 +64,7 @@ Do NOT load `docs/01-init.md` for routine operations (create, search, sync, lint
 ### Notes
 | Command | Usage |
 |---------|-------|
-| `create` | `python scripts/obsidian_mgr.py create <name> [--content "..."] [--type concept\|entity\|source\|comparison\|question] [--open]` |
+| `create` | `python scripts/obsidian_mgr.py create <name> [--type ...] --domain "..." [--related "[[...]]" ...] [--content "..."] [--open]` |
 | `edit` | `python scripts/obsidian_mgr.py edit <name> --content "..." [--append]` |
 | `move` | `python scripts/obsidian_mgr.py move <src> <dest> [--open]` |
 | `delete` | `python scripts/obsidian_mgr.py delete <name>` |

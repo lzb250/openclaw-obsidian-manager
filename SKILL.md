@@ -29,7 +29,7 @@ Do NOT load `docs/01-init.md` for routine operations (create, search, sync, lint
 ### Notes
 | Command | Usage |
 |---------|-------|
-| `create` | `python scripts/obsidian_mgr.py create <name> [--content "..."] [--type concept\|entity\|source\|comparison\|question] [--open]` |
+| `create` | `python scripts/obsidian_mgr.py create <name> [--type ...] --domain "..." [--related "[[...]]" ...] [--content "..."] [--open]` |
 | `edit` | `python scripts/obsidian_mgr.py edit <name> --content "..." [--append]` |
 | `move` | `python scripts/obsidian_mgr.py move <src> <dest> [--open]` |
 | `delete` | `python scripts/obsidian_mgr.py delete <name>` |

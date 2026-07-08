@@ -3,16 +3,19 @@
 ## create -- Create a new note
 
 ```
-python scripts/obsidian_mgr.py create <name> [--content "..."] [--type <type>] [--open]
+python scripts/obsidian_mgr.py create <name> [--content "..."] [--type <type>] --domain "<domain>" [--related "[[Page A]]" ...] [--open]
 ```
 
 - `name`: Note name (with or without `.md` extension)
 - `--content`: Initial note content (optional)
 - `--type`: Page type: `concept`, `entity`, `source`, `comparison`, or `question`. Places note in the correct wiki subdirectory and uses the corresponding template.
+- `--domain` **(required for typed notes)**: Domain name. Automatically creates the domain page in `wiki/domains/` if it doesn't exist, and establishes bidirectional links between the note and its domain.
+- `--related`: Related page wikilinks (repeatable). Establishes bidirectional links between the new note and each target page.
 - `--open`: Open in Obsidian after creation (optional)
 
+**Categorization workflow**: Before creating a note, list existing domains (`list wiki/domains`), analyze the content to determine the right domain, and always pass `--domain`. If no matching domain exists, ask the user whether to create one.
+
 Without `--type`, creates a plain note at the vault root with universal frontmatter.
-With `--type`, creates in the appropriate wiki subdirectory with per-type frontmatter schema.
 
 ## edit -- Edit an existing note
 
